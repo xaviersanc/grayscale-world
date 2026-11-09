@@ -1,79 +1,113 @@
 const MODULE_ID = "grayscale-world";
 
 /* -------------------------------------------- */
+/*  Textes (intégrés : le module ne déclare aucun fichier de langue,
+    pour ne jamais interférer avec la traduction du système/des modules) */
+/* -------------------------------------------- */
+
+const STR = {
+  fr: {
+    enabled: "Activer le noir et blanc",
+    enabledHint: "Désactivé par défaut : activer le module ne change rien tant que cette case n'est pas cochée.",
+    saturation: "Saturation minimale (%)",
+    saturationHint: "0 = noir et blanc total (nuances de gris). 100 = couleurs normales. Valeur par défaut pour tous.",
+    canvas: "Appliquer à la carte et aux tokens",
+    canvasHint: "Filtre sur la scène (carte, tokens, tuiles).",
+    ui: "Appliquer à l'interface (menus, fenêtres, images)",
+    uiHint: "Option expérimentale. Si un HUD ou un menu disparaît, décochez-la.",
+    walls: "Zones de lumière : suivre les murs",
+    wallsHint: "La zone en couleur reprend la forme réelle de la lumière (bloquée par les murs). Sinon : simple cercle.",
+    override: "Utiliser ma propre saturation",
+    overrideHint: "Remplace la valeur du MJ, pour vous uniquement.",
+    userSaturation: "Ma saturation (%)",
+    userSaturationHint: "Utilisée seulement si « Utiliser ma propre saturation » est cochée.",
+    keepLight: "Zone de couleur",
+    keepLightHint: "La zone éclairée par cette lumière (murs inclus) reste en couleur.",
+    keepToken: "Token en couleur",
+    keepTokenHint: "Ce token reste en couleur malgré le noir et blanc.",
+    colorRadius: "Rayon de couleur autour du token",
+    colorRadiusHint: "En unités de distance de la scène. 0 = le token seulement."
+  },
+  en: {
+    enabled: "Enable black and white",
+    enabledHint: "Off by default: enabling the module changes nothing until this box is checked.",
+    saturation: "Minimum saturation (%)",
+    saturationHint: "0 = full grayscale. 100 = normal colors. Default for everyone.",
+    canvas: "Apply to map and tokens",
+    canvasHint: "Filter on the scene (map, tokens, tiles).",
+    ui: "Apply to interface (menus, windows, images)",
+    uiHint: "Experimental. If a HUD or menu disappears, uncheck it.",
+    walls: "Light zones: follow walls",
+    wallsHint: "The colored zone uses the real light shape (blocked by walls). Otherwise: a simple circle.",
+    override: "Use my own saturation",
+    overrideHint: "Overrides the GM value, for you only.",
+    userSaturation: "My saturation (%)",
+    userSaturationHint: "Only used if \"Use my own saturation\" is checked.",
+    keepLight: "Color zone",
+    keepLightHint: "The area lit by this light (walls included) stays in color.",
+    keepToken: "Token in color",
+    keepTokenHint: "This token stays in color despite the grayscale.",
+    colorRadius: "Color radius around token",
+    colorRadiusHint: "In scene distance units. 0 = the token only."
+  }
+};
+const t = key => (STR[game.i18n?.lang] ?? STR.en)[key] ?? key;
+
+/** Exécute fn sans jamais laisser une erreur casser Foundry ou les autres modules. */
+function safe(label, fn) {
+  return (...args) => {
+    try {
+      return fn(...args);
+    } catch (err) {
+      console.error(`${MODULE_ID} | ${label}`, err);
+    }
+  };
+}
+
+/* -------------------------------------------- */
 /*  Réglages                                     */
 /* -------------------------------------------- */
 
-Hooks.once("init", () => {
-  const refresh = () => {
+Hooks.once("init", safe("init", () => {
+  const refresh = safe("refresh", () => {
     applyCSS();
     if (canvas?.ready) setupCanvas();
-  };
-
-  game.settings.register(MODULE_ID, "enabled", {
-    name: "GRAYSCALE.Enabled",
-    hint: "GRAYSCALE.EnabledHint",
-    scope: "world",
-    config: true,
-    restricted: true,
-    type: Boolean,
-    default: true,
-    onChange: refresh
   });
 
-  game.settings.register(MODULE_ID, "saturation", {
-    name: "GRAYSCALE.Saturation",
-    hint: "GRAYSCALE.SaturationHint",
-    scope: "world",
+  const reg = (key, opts) => game.settings.register(MODULE_ID, key, {
+    name: t(key),
+    hint: t(key + "Hint"),
     config: true,
-    restricted: true,
-    type: Number,
-    default: 0,
-    range: { min: 0, max: 100, step: 1 },
-    onChange: refresh
+    onChange: refresh,
+    ...opts
   });
 
-  game.settings.register(MODULE_ID, "override", {
-    name: "GRAYSCALE.Override",
-    hint: "GRAYSCALE.OverrideHint",
-    scope: "client",
-    config: true,
-    type: Boolean,
-    default: false,
-    onChange: refresh
-  });
+  reg("enabled", { scope: "world", restricted: true, type: Boolean, default: false });
+  reg("saturation", { scope: "world", restricted: true, type: Number, default: 0, range: { min: 0, max: 100, step: 1 } });
+  reg("canvas", { scope: "world", restricted: true, type: Boolean, default: true });
+  reg("ui", { scope: "world", restricted: true, type: Boolean, default: false });
+  reg("walls", { scope: "world", restricted: true, type: Boolean, default: true });
+  reg("override", { scope: "client", type: Boolean, default: false });
+  reg("userSaturation", { scope: "client", type: Number, default: 0, range: { min: 0, max: 100, step: 1 } });
+}));
 
-  game.settings.register(MODULE_ID, "userSaturation", {
-    name: "GRAYSCALE.UserSaturation",
-    hint: "GRAYSCALE.UserSaturationHint",
-    scope: "client",
-    config: true,
-    type: Number,
-    default: 0,
-    range: { min: 0, max: 100, step: 1 },
-    onChange: refresh
-  });
-});
+Hooks.once("ready", safe("ready", () => applyCSS()));
 
-Hooks.once("ready", applyCSS);
+const getSetting = key => game.settings.get(MODULE_ID, key);
+const isEnabled = () => getSetting("enabled");
 
 /** Saturation effective (0..1) pour l'utilisateur courant. */
 function effectiveSaturation() {
-  const useOwn = game.settings.get(MODULE_ID, "override");
-  const pct = useOwn
-    ? game.settings.get(MODULE_ID, "userSaturation")
-    : game.settings.get(MODULE_ID, "saturation");
+  const pct = getSetting("override") ? getSetting("userSaturation") : getSetting("saturation");
   return Math.min(1, Math.max(0, Number(pct) / 100));
 }
 
-const isEnabled = () => game.settings.get(MODULE_ID, "enabled");
-
 /* -------------------------------------------- */
-/*  Interface HTML (CSS)                         */
+/*  Interface HTML (CSS, optionnel)              */
 /* -------------------------------------------- */
 
 function applyCSS() {
-  document.body.classList.toggle("gw-on", isEnabled());
+  document.body.classList.toggle("gw-ui", isEnabled() && getSetting("ui"));
   document.documentElement.style.setProperty("--gw-sat", String(effectiveSaturation()));
 }
 
@@ -93,7 +127,6 @@ uniform float uHasMask;
 
 void main() {
   vec4 c = texture2D(uSampler, vTextureCoord);
-  // Coordonnées 0..1 dans la zone filtrée (= écran), identiques à celles de la texture du masque
   vec2 uv = vTextureCoord * inputSize.xy / outputFrame.zw;
   float m = uHasMask > 0.5 ? texture2D(uMask, uv).a : 0.0;
   float s = mix(uSat, 1.0, m);
@@ -107,6 +140,7 @@ const state = {
   maskRT: null,
   maskSize: [0, 0, 0],
   container: null,
+  graphics: null,
   sprites: [],
   gradient: null,
   tick: null
@@ -130,14 +164,15 @@ function gradientTexture() {
 
 function setupCanvas() {
   teardownCanvas();
-  if (!isEnabled()) return;
+  if (!isEnabled() || !getSetting("canvas")) return;
 
   const stage = canvas.stage;
   try {
     state.filter = new PIXI.Filter(undefined, FRAGMENT, { uSat: 0, uHasMask: 0, uMask: PIXI.Texture.EMPTY });
     state.container = new PIXI.Container();
+    state.graphics = new PIXI.Graphics();
+    state.container.addChild(state.graphics);
   } catch (err) {
-    // Repli : désaturation simple, sans zones de couleur
     console.warn(`${MODULE_ID} | shader indisponible, repli sans zones de couleur`, err);
     state.filter = new PIXI.ColorMatrixFilter();
     state.fallback = true;
@@ -146,35 +181,53 @@ function setupCanvas() {
   stage.filterArea = canvas.app.screen;
   stage.filters = [...(stage.filters ?? []), state.filter];
 
-  state.tick = () => updateFilter();
+  state.tick = safe("tick", updateFilter);
   canvas.app.ticker.add(state.tick);
   updateFilter();
 }
 
 function teardownCanvas() {
-  if (state.tick) canvas.app?.ticker?.remove(state.tick);
-  if (state.filter && canvas.stage) {
-    canvas.stage.filters = (canvas.stage.filters ?? []).filter(f => f !== state.filter);
-    if (!canvas.stage.filters.length) canvas.stage.filters = null;
+  try {
+    if (state.tick) canvas.app?.ticker?.remove(state.tick);
+    if (state.filter && canvas.stage) {
+      const rest = (canvas.stage.filters ?? []).filter(f => f !== state.filter);
+      canvas.stage.filters = rest.length ? rest : null;
+      canvas.stage.filterArea = null;
+    }
+    state.maskRT?.destroy(true);
+    state.container?.destroy({ children: true });
+  } catch (err) {
+    console.error(`${MODULE_ID} | teardown`, err);
   }
-  state.maskRT?.destroy(true);
-  state.container?.destroy({ children: true });
-  Object.assign(state, { filter: null, fallback: false, maskRT: null, maskSize: [0, 0, 0], container: null, sprites: [], tick: null });
+  Object.assign(state, { filter: null, fallback: false, maskRT: null, maskSize: [0, 0, 0], container: null, graphics: null, sprites: [], tick: null });
 }
 
-Hooks.on("canvasReady", setupCanvas);
-Hooks.on("canvasTearDown", teardownCanvas);
+Hooks.on("canvasReady", safe("canvasReady", setupCanvas));
+Hooks.on("canvasTearDown", safe("canvasTearDown", teardownCanvas));
 
-/** Liste des zones de couleur (centre + rayon en pixels de scène). */
+/**
+ * Zones de couleur.
+ *  - { points }  : polygone réel de la lumière (murs pris en compte)
+ *  - { x, y, r } : cercle (repli, tokens)
+ */
 function collectZones() {
   const zones = [];
   const dp = canvas.dimensions.distancePixels;
+  const followWalls = getSetting("walls");
 
   for (const light of canvas.lighting?.placeables ?? []) {
     const d = light.document;
     if (d.hidden || !d.getFlag(MODULE_ID, "keepColor")) continue;
-    const r = Math.max(d.config.dim ?? 0, d.config.bright ?? 0) * dp;
-    if (r > 0) zones.push({ x: d.x, y: d.y, r: r / 0.85 });
+    const src = light.source ?? light.lightSource;
+    if (src && src.active === false) continue;
+
+    const points = followWalls ? src?.shape?.points : null;
+    if (points?.length >= 6) {
+      zones.push({ points });
+    } else {
+      const r = Math.max(d.config.dim ?? 0, d.config.bright ?? 0) * dp;
+      if (r > 0) zones.push({ x: d.x, y: d.y, r: r / 0.85 });
+    }
   }
 
   for (const token of canvas.tokens?.placeables ?? []) {
@@ -204,7 +257,7 @@ function updateFilter() {
 
   if (state.fallback) {
     filter.reset();
-    filter.saturate(sat - 1, true); // ColorMatrixFilter.saturate(amount) : 0 = inchangé, -1 = gris
+    filter.saturate(sat - 1, true);
     return;
   }
 
@@ -217,7 +270,17 @@ function updateFilter() {
 
   ensureMask();
   const tex = gradientTexture();
-  zones.forEach((z, i) => {
+
+  // Polygones de lumière (forme réelle, murs inclus)
+  const g = state.graphics;
+  g.clear();
+  g.beginFill(0xffffff, 1);
+  for (const z of zones) if (z.points) g.drawPolygon(z.points);
+  g.endFill();
+
+  // Cercles adoucis (tokens / repli)
+  const circles = zones.filter(z => !z.points);
+  circles.forEach((z, i) => {
     let s = state.sprites[i];
     if (!s) {
       s = new PIXI.Sprite(tex);
@@ -229,9 +292,8 @@ function updateFilter() {
     s.position.set(z.x, z.y);
     s.width = s.height = z.r * 2;
   });
-  for (let i = zones.length; i < state.sprites.length; i++) state.sprites[i].visible = false;
+  for (let i = circles.length; i < state.sprites.length; i++) state.sprites[i].visible = false;
 
-  // Matrice de la scène à jour (évite un décalage d'une frame pendant le déplacement de la caméra)
   const stage = canvas.stage;
   stage.transform.updateLocalTransform();
   canvas.app.renderer.render(state.container, {
@@ -248,38 +310,38 @@ function updateFilter() {
 /*  Cases à cocher dans les fenêtres de config   */
 /* -------------------------------------------- */
 
-function injectField(app, html, tabName, fieldsHtml) {
+function injectField(html, tabName, fieldsHtml) {
   const root = html instanceof HTMLElement ? html : html[0];
+  if (!root) return;
   const host = root.querySelector(`.tab[data-tab="${tabName}"]`) ?? root.querySelector("form") ?? root;
   host.insertAdjacentHTML("beforeend", fieldsHtml);
 }
 
 function checkbox(name, label, hint, checked) {
   return `<div class="form-group gw-zone-field">
-    <label>${game.i18n.localize(label)}</label>
+    <label>${t(label)}</label>
     <div class="form-fields"><input type="checkbox" name="flags.${MODULE_ID}.${name}" ${checked ? "checked" : ""}></div>
-    <p class="hint">${game.i18n.localize(hint)}</p>
+    <p class="hint">${t(hint)}</p>
   </div>`;
 }
 
-Hooks.on("renderAmbientLightConfig", (app, html) => {
+Hooks.on("renderAmbientLightConfig", safe("renderAmbientLightConfig", (app, html) => {
   const checked = !!app.document.getFlag(MODULE_ID, "keepColor");
-  injectField(app, html, "basic", checkbox("keepColor", "GRAYSCALE.KeepColorLight", "GRAYSCALE.KeepColorLightHint", checked));
-});
+  injectField(html, "basic", checkbox("keepColor", "keepLight", "keepLightHint", checked));
+}));
 
-function renderTokenFields(app, html) {
+const renderTokenFields = safe("renderTokenConfig", (app, html) => {
   const doc = app.token ?? app.document;
   const checked = !!doc.getFlag?.(MODULE_ID, "keepColor");
   const radius = Number(doc.getFlag?.(MODULE_ID, "colorRadius")) || 0;
-  const fields =
-    checkbox("keepColor", "GRAYSCALE.KeepColorToken", "GRAYSCALE.KeepColorTokenHint", checked) +
+  injectField(html, "appearance",
+    checkbox("keepColor", "keepToken", "keepTokenHint", checked) +
     `<div class="form-group gw-zone-field">
-      <label>${game.i18n.localize("GRAYSCALE.ColorRadius")}</label>
+      <label>${t("colorRadius")}</label>
       <div class="form-fields"><input type="number" min="0" step="any" name="flags.${MODULE_ID}.colorRadius" value="${radius}"></div>
-      <p class="hint">${game.i18n.localize("GRAYSCALE.ColorRadiusHint")}</p>
-    </div>`;
-  injectField(app, html, "appearance", fields);
-}
+      <p class="hint">${t("colorRadiusHint")}</p>
+    </div>`);
+});
 
 Hooks.on("renderTokenConfig", renderTokenFields);
 Hooks.on("renderPrototypeTokenConfig", renderTokenFields);

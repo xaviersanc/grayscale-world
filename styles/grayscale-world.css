@@ -1,16 +1,13 @@
-/* Désaturation de l'interface HTML (menus, fenêtres, chat, images...).
-   La carte (canvas PIXI) est gérée par un filtre dans scripts/main.js. */
+/* Désaturation de l'interface HTML : uniquement si l'option « Interface » est cochée. */
 :root {
   --gw-sat: 0;
 }
 
-body.gw-on #interface,
-body.gw-on > .application,
-body.gw-on > .app,
-body.gw-on > #tooltip,
-body.gw-on > #context-menu {
+body.gw-ui #ui-left,
+body.gw-ui #ui-right,
+body.gw-ui #ui-top,
+body.gw-ui #ui-middle,
+body.gw-ui > .application,
+body.gw-ui > #tooltip {
   filter: saturate(var(--gw-sat));
 }
-
-/* Champ ajouté dans les fenêtres de configuration (lumière / token) */
-.gw-zone-field .hint { margin-top: 2px; }

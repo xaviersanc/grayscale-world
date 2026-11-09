@@ -1,16 +1,20 @@
 # Grayscale World (Foundry VTT v13)
 
-Noir et blanc (nuances de gris) pour tous les utilisateurs : interface, carte, tokens, images.
+Noir et blanc (nuances de gris). **Désactivé par défaut** : activer le module ne change rien, tout se règle dans *Configuration des réglages > Grayscale World*.
 
-## Réglages
-- **MJ (monde)** : activer, saturation minimale 0–100 % (0 = gris total).
-- **Chaque utilisateur** : « Utiliser ma propre saturation » + sa valeur.
+## Réglages (MJ)
+- Activer le noir et blanc
+- Saturation minimale 0–100 % (0 = gris total)
+- Appliquer à la carte et aux tokens (filtre PIXI)
+- Appliquer à l'interface (expérimental, décocher si un HUD disparaît)
+- Zones de lumière : suivre les murs
+
+Chaque utilisateur peut utiliser sa propre saturation.
 
 ## Zones de couleur (MJ)
-- **Lumière** : config de la lumière, onglet *Basique* → « Zone de couleur ». La zone (rayon max dim/bright) reste en couleur.
-- **Token** : config du token, onglet *Apparence* → « Token en couleur » + rayon de couleur optionnel.
+- **Lumière** : config de la lumière, onglet *Basique* > « Zone de couleur ». Suit la forme réelle de la lumière (murs inclus).
+- **Token** : config du token, onglet *Apparence* > « Token en couleur » + rayon optionnel.
 
-## Installation sur Forge
-1. Remplacer `VOTRE-COMPTE` dans `module.json` (url/manifest/download).
-2. Publier `module.json` et `grayscale-world.zip` dans une release GitHub.
-3. Forge : Bazaar → Modules → Install Module → coller l'URL du manifest.
+## Secours si l'affichage est cassé
+Console du navigateur (F12) :
+`game.settings.set("grayscale-world","enabled",false)`
