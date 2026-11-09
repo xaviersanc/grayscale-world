@@ -26,7 +26,10 @@ const STR = {
     keepToken: "Token en couleur",
     keepTokenHint: "Ce token reste en couleur malgré le noir et blanc.",
     colorRadius: "Rayon de couleur autour du token",
-    colorRadiusHint: "En unités de distance de la scène. 0 = le token seulement."
+    colorRadiusHint: "En unités de distance de la scène. 0 = le token seulement.",
+    zoneSat: "Saturation dans la zone (%)",
+    zoneSatHint: "Indépendante du réglage global. 100 = couleurs normales, 0 = reste en gris.",
+    toolTitle: "Zone de couleur (rayon, murs, angle, rotation)"
   },
   en: {
     enabled: "Enable black and white",
@@ -48,7 +51,10 @@ const STR = {
     keepToken: "Token in color",
     keepTokenHint: "This token stays in color despite the grayscale.",
     colorRadius: "Color radius around token",
-    colorRadiusHint: "In scene distance units. 0 = the token only."
+    colorRadiusHint: "In scene distance units. 0 = the token only.",
+    zoneSat: "Saturation inside the zone (%)",
+    zoneSatHint: "Independent from the global setting. 100 = normal colors, 0 = stays gray.",
+    toolTitle: "Color zone (radius, walls, angle, rotation)"
   }
 };
 const t = key => (STR[game.i18n?.lang] ?? STR.en)[key] ?? key;
@@ -128,8 +134,11 @@ uniform float uHasMask;
 void main() {
   vec4 c = texture2D(uSampler, vTextureCoord);
   vec2 uv = vTextureCoord * inputSize.xy / outputFrame.zw;
-  float m = uHasMask > 0.5 ? texture2D(uMask, uv).a : 0.0;
-  float s = mix(uSat, 1.0, m);
+  vec4 mk = uHasMask > 0.5 ? texture2D(uMask, uv) : vec4(0.0);
+  float m = mk.a;
+  // Le masque stocke la saturation de la zone dans le rouge (prémultiplié par l'alpha)
+  float z = m > 0.001 ? clamp(mk.r / m, 0.0, 1.0) : 1.0;
+  float s = mix(uSat, z, m);
   float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   gl_FragColor = vec4(mix(vec3(l), c.rgb, s), c.a);
 }`;
@@ -250,6 +259,19 @@ Hooks.on("canvasTearDown", safe("canvasTearDown", teardownCanvas));
  *  - { points }  : polygone réel de la lumière (murs pris en compte)
  *  - { x, y, r } : cercle (repli, tokens)
  */
+/** Saturation propre à une zone (0..1), 100 % par défaut. */
+function zoneSat(doc) {
+  const v = doc.getFlag?.(MODULE_ID, "zoneSaturation");
+  if (v === undefined || v === null || v === "") return 1;
+  return Math.min(1, Math.max(0, Number(v) / 100));
+}
+
+/** Niveau de gris (0..1) -> couleur PIXI, pour encoder la saturation de zone dans le masque. */
+function grey(v) {
+  const n = Math.round(Math.min(1, Math.max(0, v)) * 255);
+  return (n << 16) | (n << 8) | n;
+}
+
 function collectZones() {
   const zones = [];
   const dp = canvas.dimensions.distancePixels;
@@ -263,10 +285,10 @@ function collectZones() {
 
     const points = followWalls ? src?.shape?.points : null;
     if (points?.length >= 6) {
-      zones.push({ points });
+      zones.push({ points, sat: zoneSat(d) });
     } else {
       const r = Math.max(d.config.dim ?? 0, d.config.bright ?? 0) * dp;
-      if (r > 0) zones.push({ x: d.x, y: d.y, r: r / 0.85 });
+      if (r > 0) zones.push({ x: d.x, y: d.y, r: r / 0.85, sat: zoneSat(d) });
     }
   }
 
@@ -275,7 +297,7 @@ function collectZones() {
     if (!token.visible || !d.getFlag(MODULE_ID, "keepColor")) continue;
     const extra = (Number(d.getFlag(MODULE_ID, "colorRadius")) || 0) * dp;
     const c = token.center;
-    zones.push({ x: c.x, y: c.y, r: Math.max(token.w, token.h) / 2 / 0.7 + extra });
+    zones.push({ x: c.x, y: c.y, r: Math.max(token.w, token.h) / 2 / 0.7 + extra, sat: zoneSat(d) });
   }
   return zones;
 }
@@ -314,9 +336,12 @@ function updateFilter() {
   // Polygones de lumière (forme réelle, murs inclus)
   const g = state.graphics;
   g.clear();
-  g.beginFill(0xffffff, 1);
-  for (const z of zones) if (z.points) g.drawPolygon(z.points);
-  g.endFill();
+  for (const z of zones) {
+    if (!z.points) continue;
+    g.beginFill(grey(z.sat), 1);
+    g.drawPolygon(z.points);
+    g.endFill();
+  }
 
   // Cercles adoucis (tokens / repli)
   const circles = zones.filter(z => !z.points);
@@ -329,6 +354,7 @@ function updateFilter() {
       state.sprites[i] = s;
     }
     s.visible = true;
+    s.tint = grey(z.sat);
     s.position.set(z.x, z.y);
     s.width = s.height = z.r * 2;
   });
@@ -365,9 +391,21 @@ function checkbox(name, label, hint, checked) {
   </div>`;
 }
 
+function numberField(name, label, hint, value) {
+  return `<div class="form-group gw-zone-field">
+    <label>${t(label)}</label>
+    <div class="form-fields"><input type="number" min="0" max="100" step="1" name="flags.${MODULE_ID}.${name}" value="${value}"></div>
+    <p class="hint">${t(hint)}</p>
+  </div>`;
+}
+
+const zoneSatPct = doc => Math.round(zoneSat(doc) * 100);
+
 Hooks.on("renderAmbientLightConfig", safe("renderAmbientLightConfig", (app, html) => {
   const checked = !!app.document.getFlag(MODULE_ID, "keepColor");
-  injectField(html, "basic", checkbox("keepColor", "keepLight", "keepLightHint", checked));
+  injectField(html, "basic",
+    checkbox("keepColor", "keepLight", "keepLightHint", checked) +
+    numberField("zoneSaturation", "zoneSat", "zoneSatHint", zoneSatPct(app.document)));
 }));
 
 const renderTokenFields = safe("renderTokenConfig", (app, html) => {
@@ -376,6 +414,7 @@ const renderTokenFields = safe("renderTokenConfig", (app, html) => {
   const radius = Number(doc.getFlag?.(MODULE_ID, "colorRadius")) || 0;
   injectField(html, "appearance",
     checkbox("keepColor", "keepToken", "keepTokenHint", checked) +
+    numberField("zoneSaturation", "zoneSat", "zoneSatHint", zoneSatPct(doc)) +
     `<div class="form-group gw-zone-field">
       <label>${t("colorRadius")}</label>
       <div class="form-fields"><input type="number" min="0" step="any" name="flags.${MODULE_ID}.colorRadius" value="${radius}"></div>
@@ -385,3 +424,48 @@ const renderTokenFields = safe("renderTokenConfig", (app, html) => {
 
 Hooks.on("renderTokenConfig", renderTokenFields);
 Hooks.on("renderPrototypeTokenConfig", renderTokenFields);
+
+/* -------------------------------------------- */
+/*  Outil « Zone de couleur » (contrôles d'éclairage) */
+/* -------------------------------------------- */
+
+/**
+ * Crée une lumière « zone de couleur » au centre de la vue puis ouvre sa configuration :
+ * rayon, contrainte par les murs, angle d'émission, rotation... + saturation de la zone.
+ * La lumière n'éclaire quasiment pas (luminosité minimale) : elle ne sert qu'à définir la zone.
+ */
+const createColorZone = safe("createColorZone", async () => {
+  const scene = canvas.scene;
+  if (!scene) return;
+  const pivot = canvas.stage.pivot;
+  const dist = scene.grid.distance || 5;
+  const [doc] = await scene.createEmbeddedDocuments("AmbientLight", [{
+    x: Math.round(pivot.x),
+    y: Math.round(pivot.y),
+    rotation: 0,
+    walls: true,
+    vision: false,
+    config: { bright: 0, dim: dist * 4, angle: 360, luminosity: 0.01, alpha: 0.1 },
+    flags: { [MODULE_ID]: { keepColor: true, zoneSaturation: 100 } }
+  }]);
+  doc?.sheet?.render(true);
+});
+
+Hooks.on("getSceneControlButtons", safe("getSceneControlButtons", controls => {
+  if (!game.user.isGM) return;
+  const tool = {
+    name: "gw-color-zone",
+    title: t("toolTitle"),
+    icon: "fa-solid fa-palette",
+    order: 99,
+    button: true,
+    visible: true,
+    onChange: () => createColorZone(),
+    onClick: () => createColorZone()
+  };
+  if (Array.isArray(controls)) {
+    controls.find(c => c.name === "lighting")?.tools.push(tool);
+  } else if (controls.lighting) {
+    controls.lighting.tools[tool.name] = tool;
+  }
+}));
