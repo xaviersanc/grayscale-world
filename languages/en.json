@@ -1,0 +1,16 @@
+{
+  "GRAYSCALE.Enabled": "Enable black and white",
+  "GRAYSCALE.EnabledHint": "Desaturates the interface, map, tokens and images for all users.",
+  "GRAYSCALE.Saturation": "Minimum saturation (%)",
+  "GRAYSCALE.SaturationHint": "0 = full grayscale. 100 = normal colors. Default for all users.",
+  "GRAYSCALE.Override": "Use my own saturation",
+  "GRAYSCALE.OverrideHint": "Overrides the GM value, for you only.",
+  "GRAYSCALE.UserSaturation": "My saturation (%)",
+  "GRAYSCALE.UserSaturationHint": "Only used if \"Use my own saturation\" is checked.",
+  "GRAYSCALE.KeepColorLight": "Color zone",
+  "GRAYSCALE.KeepColorLightHint": "The area lit by this light stays in color despite the grayscale.",
+  "GRAYSCALE.KeepColorToken": "Token in color",
+  "GRAYSCALE.KeepColorTokenHint": "This token stays in color despite the grayscale.",
+  "GRAYSCALE.ColorRadius": "Color radius around token",
+  "GRAYSCALE.ColorRadiusHint": "In scene distance units. 0 = the token only."
+}
