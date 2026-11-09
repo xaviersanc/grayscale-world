@@ -2,7 +2,7 @@
   "id": "grayscale-world",
   "title": "Grayscale World / Monde en noir et blanc",
   "description": "Désature la carte et les tokens (et en option l'interface) pour tous les utilisateurs, avec une saturation minimale réglable. Le MJ peut garder la couleur dans des zones de lumière (murs inclus) ou sur des tokens. Désactivé par défaut : tout se règle dans les options du module.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "compatibility": {
     "minimum": "13",
     "verified": "13"
