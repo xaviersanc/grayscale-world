@@ -116,7 +116,7 @@ function applyCSS() {
 /* -------------------------------------------- */
 
 const FRAGMENT = `
-precision mediump float;
+precision highp float;
 varying vec2 vTextureCoord;
 uniform sampler2D uSampler;
 uniform sampler2D uMask;
@@ -133,6 +133,45 @@ void main() {
   float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   gl_FragColor = vec4(mix(vec3(l), c.rgb, s), c.a);
 }`;
+
+/**
+ * Vérifie que le shader se compile et se lie avec le vertex shader de PIXI AVANT de l'utiliser.
+ * (Un shader invalide ne lève aucune erreur à la création : la carte devient simplement invisible.)
+ */
+function shaderLinks() {
+  try {
+    const c = document.createElement("canvas");
+    const gl = c.getContext("webgl2") ?? c.getContext("webgl");
+    if (!gl) return false;
+    let vsrc = PIXI.Filter.defaultVertexSrc;
+    if (!/^\s*precision/.test(vsrc)) vsrc = "precision highp float;\n" + vsrc;
+
+    const compile = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.warn(`${MODULE_ID} | compilation shader`, gl.getShaderInfoLog(s));
+        return null;
+      }
+      return s;
+    };
+    const v = compile(gl.VERTEX_SHADER, vsrc);
+    const f = compile(gl.FRAGMENT_SHADER, FRAGMENT);
+    if (!v || !f) return false;
+
+    const p = gl.createProgram();
+    gl.attachShader(p, v);
+    gl.attachShader(p, f);
+    gl.linkProgram(p);
+    const ok = gl.getProgramParameter(p, gl.LINK_STATUS);
+    if (!ok) console.warn(`${MODULE_ID} | liaison shader`, gl.getProgramInfoLog(p));
+    return ok;
+  } catch (err) {
+    console.warn(`${MODULE_ID} | vérification shader`, err);
+    return false;
+  }
+}
 
 const state = {
   filter: null,
@@ -168,6 +207,7 @@ function setupCanvas() {
 
   const stage = canvas.stage;
   try {
+    if (!shaderLinks()) throw new Error("le shader ne se lie pas");
     state.filter = new PIXI.Filter(undefined, FRAGMENT, { uSat: 0, uHasMask: 0, uMask: PIXI.Texture.EMPTY });
     state.container = new PIXI.Container();
     state.graphics = new PIXI.Graphics();
